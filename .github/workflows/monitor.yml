@@ -1,0 +1,71 @@
+name: P-Bandai Monitor V4.1
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "2,7,12,17,22,27,32,37,42,47,52,57 * * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pbandai-monitor-v4-1
+  cancel-in-progress: false
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Cache Chromium
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
+
+      - name: Install Python packages
+        run: pip install -r requirements.txt
+
+      - name: Install Chromium
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: python -m playwright install --with-deps chromium
+
+      - name: Install Chromium system dependencies
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: python -m playwright install-deps chromium
+
+      - name: Run monitor
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          DISCORD_MENTION: ${{ secrets.DISCORD_MENTION }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          TIMEZONE: America/Toronto
+          STATE_FILE: state/state.json
+          DASHBOARD_FILE: docs/index.html
+        run: python monitor.py
+
+      - name: Save state and dashboard
+        run: |
+          if git diff --quiet -- state/state.json docs/index.html; then
+            echo "No changes to commit."
+            exit 0
+          fi
+
+          git config user.name "pbandai-monitor[bot]"
+          git config user.email "pbandai-monitor[bot]@users.noreply.github.com"
+          git add state/state.json docs/index.html
+          git commit -m "Update monitor state and dashboard [skip ci]"
+          git push
