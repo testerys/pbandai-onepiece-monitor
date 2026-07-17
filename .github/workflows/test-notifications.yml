@@ -1,0 +1,34 @@
+name: Test Notifications
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Test Discord
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          DISCORD_MENTION: ${{ secrets.DISCORD_MENTION }}
+        run: |
+          payload=$(printf '{"content":"%s 🧪 GitHub Discord notification test successful."}' "$DISCORD_MENTION")
+          curl --fail-with-body \
+            -H "Content-Type: application/json" \
+            -d "$payload" \
+            "$DISCORD_WEBHOOK_URL"
+
+      - name: Test ntfy
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+        run: |
+          if [ -n "$NTFY_TOPIC" ]; then
+            curl --fail-with-body \
+              -H "Title: P-Bandai Test" \
+              -H "Priority: high" \
+              -d "GitHub ntfy notification test successful." \
+              "https://ntfy.sh/$NTFY_TOPIC"
+          else
+            echo "NTFY_TOPIC is not configured."
+          fi
